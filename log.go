@@ -7,7 +7,6 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -21,6 +20,17 @@ type QSO struct {
 	Comment   string
 }
 
+type LogType interface {
+	// Generate the input form for the log type.
+	inputForm() *tview.Form
+
+	// Clear the input form.
+	clearForm(inputForm *tview.Form)
+
+	// Commit the QSO to the database.
+	commitQSO(inputForm *tview.Form, page *tview.Pages, table *tview.Table)
+}
+
 func initDB() *gorm.DB {
 	db, err := gorm.Open(sqlite.Open("log.db"), &gorm.Config{})
 	if err != nil {
@@ -30,114 +40,10 @@ func initDB() *gorm.DB {
 	return db
 }
 
-func inputForm(app *tview.Application) *tview.Form {
-	callsignField := tview.NewInputField()
-	callsignField.
-		SetPlaceholder("Callsign").
-		SetFieldWidth(20).
-		SetChangedFunc(func(text string) {
-			// This is kind of a hack. We check if the field is already
-			// uppercase to prevent infinite recursion. There might be a
-			// better way to do this.
-			if strings.ToUpper(text) != text {
-				callsignField.SetText(strings.ToUpper(text))
-			}
-		})
-
-	frequencyField := tview.NewInputField().
-		SetPlaceholder("Frequency KHz").
-		SetFieldWidth(20)
-
-	modeField := tview.NewDropDown().
-		SetOptions([]string{"SSB", "CW", "FT8", "FT4", "RTTY", "PSK31", "FM", "AM"}, nil).
-		SetCurrentOption(0).
-		SetFieldWidth(10)
-
-	sentField := tview.NewInputField()
-	sentField.
-		SetPlaceholder("Sent RST").
-		SetFieldWidth(10).
-		SetDoneFunc(func(key tcell.Key) {
-			if sentField.GetText() == "" {
-				_, mode := modeField.GetCurrentOption()
-				if mode == "CW" {
-					sentField.SetText("599")
-				} else {
-					sentField.SetText("59")
-				}
-			}
-		}).
-		SetFocusFunc(func() {
-			_, mode := modeField.GetCurrentOption()
-			if mode == "CW" {
-				sentField.SetPlaceholder("599")
-			} else {
-				sentField.SetPlaceholder("59")
-			}
-		})
-
-	receivedField := tview.NewInputField()
-	receivedField.
-		SetPlaceholder("Rcv'd RST").
-		SetFieldWidth(10).
-		SetDoneFunc(func(key tcell.Key) {
-			if receivedField.GetText() == "" {
-				_, mode := modeField.GetCurrentOption()
-				if mode == "CW" {
-					receivedField.SetText("599")
-				} else {
-					receivedField.SetText("59")
-				}
-			}
-		}).
-		SetFocusFunc(func() {
-			_, mode := modeField.GetCurrentOption()
-			if mode == "CW" {
-				receivedField.SetPlaceholder("599")
-			} else {
-				receivedField.SetPlaceholder("59")
-			}
-		})
-
-	commentField := tview.NewInputField().
-		SetPlaceholder("Comment").
-		SetFieldWidth(100)
-
-	form := tview.NewForm().
-		AddTextView("", "QSO: ", 4, 2, true, false).
-		AddFormItem(callsignField).
-		AddFormItem(frequencyField).
-		AddFormItem(modeField).
-		AddFormItem(sentField).
-		AddFormItem(receivedField).
-		AddFormItem(commentField).
-		SetHorizontal(true)
-
-		/*
-			SetFinishedFunc(func(key tcell.Key) {
-				if key == tcell.KeyEnter {
-					// Show modal with the entered data.
-					modal := tview.NewModal()
-					text := fmt.Sprintf("Callsign: %s Frequency: %s Mode: %s Sent: %s Received: %s Comment: %s",
-						callsignField.GetText(),
-						frequencyField.GetText(),
-						modeField.GetCurrentOption(),
-						sentField.GetText(),
-						receivedField.GetText(),
-						commentField.GetText(),
-					)
-					modal.SetText(text).Show()
-					app.SetRoot(modal, true)
-				}
-			})*/
-
-	return form
-}
-
 // Return a dictionary of tag data from the comment field text given.
 func commentToTags(comment string) map[string]string {
 	tags := make(map[string]string)
-	re := regexp.MustCompile(`([\w\d-]+)\s*:\s*(?:"([^"]+)"|([^"\s]+))`)
+	re := regexp.MustCompile(`([\w\d-]+):(?:"([^"]+)"|([^"\s]+))`)
 	matches := re.FindAllStringSubmatch(comment, -1)
 	for _, match := range matches {
 		key := match[1]
@@ -152,7 +58,7 @@ func commentToTags(comment string) map[string]string {
 
 // Color the keys and values of tags in the comment field.
 func colorTags(comment string) string {
-	re := regexp.MustCompile(`([\w\d-]+)\s*:\s*(?:"([^"]+)"|([^"\s]+))`)
+	re := regexp.MustCompile(`([\w\d-]+):(?:"([^"]+)"|([^"\s]+))`)
 	matches := re.FindAllStringSubmatch(comment, -1)
 	for _, match := range matches {
 		key := match[1]
@@ -211,26 +117,17 @@ func renderLogTable(db *gorm.DB) *tview.Table {
 	return table
 }
 
-func clearForm(app *tview.Application, inputForm *tview.Form) {
-	for i := 0; i < inputForm.GetFormItemCount(); i++ {
-		switch item := inputForm.GetFormItem(i).(type) {
-		case *tview.InputField:
-			item.SetText("")
-		case *tview.DropDown:
-			item.SetCurrentOption(0)
-		}
-	}
-
-	// Take me back to the callsign field.
-	inputForm.SetFocus(1)
-	app.SetFocus(inputForm.GetFormItem(1))
-}
-
-func globalInputHandler(inputForm *tview.Form, app *tview.Application, pages *tview.Pages, db *gorm.DB, table *tview.Table) func(event *tcell.EventKey) *tcell.EventKey {
+func globalInputHandler(
+	log LogType,
+	inputForm *tview.Form,
+	app *tview.Application,
+	pages *tview.Pages,
+	db *gorm.DB,
+	table *tview.Table) func(event *tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		// Handle alt-c to clear the form and focus the callsign field.
 		if event.Modifiers()&tcell.ModAlt > 0 && event.Rune() == 'c' {
-			clearForm(app, inputForm)
+			log.clearForm(inputForm)
 			// Eat the event, otherwise we'll get a "c" in the current field.
 			return nil
 		}
@@ -242,48 +139,7 @@ func globalInputHandler(inputForm *tview.Form, app *tview.Application, pages *tv
 				return event
 			}
 
-			// Show modal with the entered data.
-			modal := tview.NewModal().
-				AddButtons([]string{"OK"}).
-				SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-					pages.RemovePage("modal")
-				})
-
-			callsign := inputForm.GetFormItem(1).(*tview.InputField).GetText()
-			frequency, err := strconv.ParseFloat(inputForm.GetFormItem(2).(*tview.InputField).GetText(), 64)
-			_, mode := inputForm.GetFormItem(3).(*tview.DropDown).GetCurrentOption()
-			sent, err := strconv.Atoi(inputForm.GetFormItem(4).(*tview.InputField).GetText())
-			received, err := strconv.Atoi(inputForm.GetFormItem(5).(*tview.InputField).GetText())
-			comment := inputForm.GetFormItem(6).(*tview.InputField).GetText()
-
-			if err != nil {
-				modal.SetText(fmt.Sprintf("Error: %s", err))
-				pages.AddPage("modal", modal, true, true)
-				pages.SwitchToPage("modal").ShowPage("main")
-				return nil
-			} else {
-				qso := QSO{
-					Callsign:  callsign,
-					Frequency: int(frequency * 1000),
-					Mode:      mode,
-					Sent:      sent,
-					Received:  received,
-					Comment:   comment,
-				}
-
-				db = db.Create(&qso)
-
-				if db.Error != nil {
-					modal.SetText(fmt.Sprintf("Error saving QSO: %s", db.Error))
-					pages.AddPage("modal", modal, true, true)
-					pages.SwitchToPage("modal").ShowPage("main")
-					return nil
-				} else {
-					addQSOToTable(table, qso)
-					clearForm(app, inputForm)
-				}
-			}
-
+			log.commitQSO(inputForm, pages, table)
 			return nil
 		}
 
@@ -298,10 +154,11 @@ func main() {
 	pages := tview.NewPages()
 
 	table := renderLogTable(db)
-	form := inputForm(app)
+	log := GeneralQSOLog{app, db}
+	form := log.inputForm()
 	form.
 		SetFocus(1).
-		SetInputCapture(globalInputHandler(form, app, pages, db, table))
+		SetInputCapture(globalInputHandler(&log, form, app, pages, db, table))
 	grid := tview.NewGrid().
 		SetRows(0, 3).
 		SetColumns(0).
