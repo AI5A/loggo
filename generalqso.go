@@ -34,6 +34,10 @@ func (log *GeneralQSOLog) inputForm() *tview.Form {
 
 func (log *GeneralQSOLog) clearForm(inputForm *tview.Form) {
 	for i := 0; i < inputForm.GetFormItemCount(); i++ {
+		if i == 2 || i == 3 {
+			// Skip frequency and mode
+			continue
+		}
 		switch item := inputForm.GetFormItem(i).(type) {
 		case *tview.InputField:
 			item.SetText("")
