@@ -111,6 +111,8 @@ func renderLogTable(db *gorm.DB) *tview.Table {
 		addQSOToTable(table, qso)
 	}
 
+	table.ScrollToEnd()
+
 	return table
 }
 
