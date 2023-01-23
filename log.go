@@ -120,8 +120,8 @@ func globalInputHandler(
 	db *gorm.DB,
 	table *tview.Table) func(event *tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
-		// Handle alt-c to clear the form and focus the callsign field.
-		if event.Modifiers()&tcell.ModAlt > 0 && event.Rune() == 'c' {
+		// Handle alt-c or escape to clear the form and focus the callsign field.
+		if event.Key() == tcell.KeyEscape || (event.Modifiers()&tcell.ModAlt > 0 && event.Rune() == 'c') {
 			log.clearForm(inputForm)
 			// Eat the event, otherwise we'll get a "c" in the current field.
 			return nil
