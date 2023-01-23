@@ -146,6 +146,11 @@ func main() {
 	db := initDB()
 
 	wantsExport := flag.Bool("export-adif", false, "Export the log in ADIF format.")
+
+	// Allow users to optionally limit which contact IDs are exported.
+	exportFrom := flag.Int("export-from", 0, "Export contacts from this ID onwards.")
+	exportTo := flag.Int("export-to", 0, "Export contacts up to this ID.")
+
 	flag.Parse()
 
 	if *wantsExport {
@@ -154,7 +159,15 @@ func main() {
 		fmt.Println("<programid:5>loggo")
 		fmt.Println("<EOH>")
 		var qsos []QSO
-		db.Find(&qsos)
+		if *exportFrom > 0 && *exportTo > 0 {
+			db.Where("id >= ? AND id <= ?", *exportFrom, *exportTo).Find(&qsos)
+		} else if *exportFrom > 0 {
+			db.Where("id >= ?", *exportFrom).Find(&qsos)
+		} else if *exportTo > 0 {
+			db.Where("id <= ?", *exportTo).Find(&qsos)
+		} else {
+			db.Find(&qsos)
+		}
 		for _, qso := range qsos {
 			fmt.Println(qso.ToADIF())
 		}
