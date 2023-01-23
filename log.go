@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/albenik/go-serial"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"gorm.io/driver/sqlite"
@@ -118,7 +119,9 @@ func globalInputHandler(
 	app *tview.Application,
 	pages *tview.Pages,
 	db *gorm.DB,
-	table *tview.Table) func(event *tcell.EventKey) *tcell.EventKey {
+	table *tview.Table,
+	cwMessages chan string,
+) func(event *tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		// Handle alt-c or escape to clear the form and focus the callsign field.
 		if event.Key() == tcell.KeyEscape || (event.Modifiers()&tcell.ModAlt > 0 && event.Rune() == 'c') {
@@ -143,6 +146,19 @@ func globalInputHandler(
 }
 
 func main() {
+	port, err := serial.Open("/dev/ttyUSB0", &serial.Mode{})
+	if err != nil {
+		panic(err)
+	}
+	defer port.Close()
+	port.SetDTR(false)
+
+	cwMessages := make(chan string)
+	morse := NewMorse(port, cwMessages, 22)
+	go morse.Run()
+
+	cwMessages <- "hi"
+
 	db := initDB()
 
 	wantsExport := flag.Bool("export-adif", false, "Export the log in ADIF format.")
@@ -186,7 +202,7 @@ func main() {
 	form := log.inputForm(table)
 	form.
 		SetFocus(1).
-		SetInputCapture(globalInputHandler(&log, form, app, pages, db, table))
+		SetInputCapture(globalInputHandler(&log, form, app, pages, db, table, cwMessages))
 	grid := tview.NewGrid().
 		SetRows(0, 3).
 		SetColumns(0).
