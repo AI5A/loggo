@@ -26,7 +26,8 @@ type QSO struct {
 
 type LogType interface {
 	// Generate the input form for the log type.
-	inputForm() *tview.Form
+	// The contact table is passed in so that the form can filter/edit it.
+	inputForm(contactTable *tview.Table) *tview.Form
 
 	// Clear the input form.
 	clearForm(inputForm *tview.Form)
@@ -89,9 +90,8 @@ func addQSOToTable(table *tview.Table, qso QSO) {
 	table.SetCellSimple(row, 7, colorTags(qso.Comment))
 }
 
-func renderLogTable(db *gorm.DB) *tview.Table {
-	table := tview.NewTable().
-		SetBorders(true).
+func renderLogTable(table *tview.Table, qsos []QSO) *tview.Table {
+	table.SetBorders(true).
 		SetFixed(1, 0).
 		SetCell(0, 0, tview.NewTableCell("[::bu]QSO[::]").SetSelectable(false)).
 		SetCell(0, 1, tview.NewTableCell("[::bu]Time/Date[::]").SetSelectable(false)).
@@ -101,10 +101,6 @@ func renderLogTable(db *gorm.DB) *tview.Table {
 		SetCell(0, 5, tview.NewTableCell("[::bu]Sent[::]").SetSelectable(false)).
 		SetCell(0, 6, tview.NewTableCell("[::bu]Rcv'd[::]").SetSelectable(false)).
 		SetCell(0, 7, tview.NewTableCell("[::bu]Comment[::]").SetExpansion(2).SetSelectable(false))
-
-	// Get all the QSOs from the database.
-	var qsos []QSO
-	db.Find(&qsos)
 
 	// Add each QSO to the table.
 	for _, qso := range qsos {
@@ -168,9 +164,13 @@ func main() {
 	app := tview.NewApplication()
 	pages := tview.NewPages()
 
-	table := renderLogTable(db)
+	var qsos []QSO
+	db.Find(&qsos)
+
+	table := tview.NewTable()
+	renderLogTable(table, qsos)
 	log := GeneralQSOLog{app, db}
-	form := log.inputForm()
+	form := log.inputForm(table)
 	form.
 		SetFocus(1).
 		SetInputCapture(globalInputHandler(&log, form, app, pages, db, table))

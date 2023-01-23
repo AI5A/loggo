@@ -12,8 +12,8 @@ type GeneralQSOLog struct {
 	db  *gorm.DB
 }
 
-func (log *GeneralQSOLog) inputForm() *tview.Form {
-	callsignField := callsignField()
+func (log *GeneralQSOLog) inputForm(contactTable *tview.Table) *tview.Form {
+	callsignField := callsignField(log.db, contactTable)
 	frequencyField := frequencyField()
 	modeField := modeField()
 	sentField := sentField(modeField)
@@ -29,7 +29,6 @@ func (log *GeneralQSOLog) inputForm() *tview.Form {
 		AddFormItem(receivedField).
 		AddFormItem(commentField).
 		SetHorizontal(true)
-
 }
 
 func (log *GeneralQSOLog) clearForm(inputForm *tview.Form) {

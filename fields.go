@@ -3,10 +3,11 @@ package main
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"gorm.io/gorm"
 	"strings"
 )
 
-func callsignField() *tview.InputField {
+func callsignField(db *gorm.DB, contactTable *tview.Table) *tview.InputField {
 	callsignField := tview.NewInputField()
 	callsignField.
 		SetPlaceholder("Callsign").
@@ -18,6 +19,11 @@ func callsignField() *tview.InputField {
 			if strings.ToUpper(text) != text {
 				callsignField.SetText(strings.ToUpper(text))
 			}
+
+			var qsos []QSO
+			db.Where("callsign LIKE ?", "%"+text+"%").Find(&qsos)
+			contactTable.Clear()
+			renderLogTable(contactTable, qsos)
 		})
 	return callsignField
 }
