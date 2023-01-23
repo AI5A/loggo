@@ -12,6 +12,8 @@ Although it is in _very_ early development, here are some planned features:
 * SKCC integration
 * POTA and SOTA integration
 
+<img src="img/screenshot.png">
+
 The base idea of *loggo* is the idea of *tags*. The "comment" field of a QSO can
 contain *tags* which are of the form `key:value` or `key:"multi-word
 value"`. This allows you to dynamically tag "important" bits of your QSO for
