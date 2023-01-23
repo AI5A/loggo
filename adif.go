@@ -32,9 +32,19 @@ func (qso QSO) ToADIF() string {
 	adif += "<TIME_ON:" + strconv.Itoa(len(qsoTime)) + ">" + qsoTime
 	adif += "<BAND:" + strconv.Itoa(len(qsoBand)) + ">" + qsoBand
 
+	// There is conflicting information on whether or not this is a
+	// requirement for POTA. It *should not be* because the implication is
+	// that if I'm uploading a log, I'm probably the one who made the
+	// contacts in that log. In any case, uncommenting this is a way to add
+	// it if ever necessary. Next activation, I will try uploading without
+	// it and see what happens. This is only really an issue because we have
+	// no notion of a global log configuration right now, so no real place
+	// to store this dynamically.
+	//adif += "<OPERATOR:4>AI5A"
+
 	tagAdifMap := map[string]string{
 		"name":  "NAME",
-		"pota":  "POTA_REF",
+		"pota":  "SIG_INFO",
 		"qth":   "QTH",
 		"grid":  "GRIDSQUARE",
 		"skcc":  "SKCC",
